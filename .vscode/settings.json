@@ -1,0 +1,13 @@
+{
+    "cSpell.words": ["httpx", "levelname"],
+    "editor.formatOnSave": true,
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+        }
+    },
+    "black-formatter.args": ["--line-length", "88"],
+    "isort.args": ["--profile", "black"]
+}
