@@ -5,7 +5,7 @@ import logging
 import streamlit as st
 
 import config
-from ui import render_chat_interface, render_file_upload
+from ui import render_file_upload
 from utils import get_claude_client
 from utils.message_handler import clear_conversation, process_message
 from utils.session import initialize_session_state

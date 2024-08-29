@@ -6,7 +6,7 @@ import logging
 import os
 from typing import Any, Dict, List, Union
 
-import streamlit as st  # Import Streamlit
+import streamlit as st
 from PIL import Image
 
 logger = logging.getLogger(__name__)
