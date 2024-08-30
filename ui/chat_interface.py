@@ -48,7 +48,7 @@ def render_chat_interface(client: AnthropicVertex) -> None:
         ):
             file = st.session_state.attached_files[0]
             # Include file content in the message
-            user_input += f"\n\nAttached file: {file.name}\n\`\`\`\n{file.read().decode('utf-8')}\n\`\`\`"
+            user_input += f"\n\nAttached file: {file.name}\n```\n{file.read().decode('utf-8')}\n```"
             # Clear attached files after including it in the message
             st.session_state.attached_files = []
 

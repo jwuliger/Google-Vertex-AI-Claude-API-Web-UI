@@ -137,7 +137,7 @@ def get_file_preview(file: Dict[str, Any]) -> str:
             if len(file["content"]) > 100
             else file["content"]
         )
-        return f"\`\`\`{file['language']}\n{preview}\n\`\`\`"
+        return f"```{file['language']}\n{preview}\n```"
     elif file["type"] == "image":
         return f"[Image Preview for {file['name']}]"
     else:
@@ -158,7 +158,7 @@ def format_file_for_message(file: Dict[str, Any]) -> List[Dict[str, Any]]:
         return [
             {
                 "type": "text",
-                "text": f"\`\`\`{file['language']}\n{file['content']}\n\`\`\`\nFile: {file['name']}",
+                "text": f"```{file['language']}\n{file['content']}\n```\nFile: {file['name']}",
             }
         ]
     elif file["type"] == "image":
