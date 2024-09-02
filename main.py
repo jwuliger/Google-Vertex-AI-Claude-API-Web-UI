@@ -32,15 +32,6 @@ def load_css() -> None:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 
-def handle_system_prompt() -> None:
-    """Handles the system prompt input and updates the session state."""
-    st.session_state.system_prompt = st.text_area(
-        "System Prompt (optional)",
-        value=st.session_state.get("system_prompt", ""),
-        help="Enter a system prompt to guide Claude's behavior. This will be included only in the first message of the conversation.",
-    )
-
-
 def main() -> None:
     """Main function to run the Streamlit application."""
     initialize_session_state()
@@ -56,7 +47,11 @@ def main() -> None:
         )
         return
 
-    handle_system_prompt()
+    system_prompt = st.text_area(
+        "System Prompt (optional)",
+        value=st.session_state.get("system_prompt", ""),
+        help="Enter a system prompt to guide Claude's behavior.",
+    )
 
     # File upload
     uploaded_files = st.file_uploader(
@@ -92,12 +87,6 @@ def main() -> None:
             # Clear the file uploader
             st.session_state.pop("file_uploader", None)
 
-        # Prepare the full prompt
-        full_prompt = prompt
-        if not st.session_state.conversation_started and st.session_state.system_prompt:
-            full_prompt = f"{st.session_state.system_prompt}\n\n{prompt}"
-            st.session_state.conversation_started = True
-
         # Display the new user message (without file content)
         with st.chat_message("user"):
             st.markdown(prompt)
@@ -113,7 +102,8 @@ def main() -> None:
                 st.session_state.messages,
                 client,
                 attached_files=attached_files,
-                user_prompt=full_prompt,
+                user_prompt=prompt,
+                system_prompt=system_prompt,
             ):
                 full_response = response
                 message_placeholder.markdown(response)
@@ -135,7 +125,10 @@ def main() -> None:
                 message_placeholder = st.empty()
                 full_response = ""
                 for response in process_message(
-                    st.session_state.messages, client, continue_last=True
+                    st.session_state.messages,
+                    client,
+                    continue_last=True,
+                    system_prompt=system_prompt,
                 ):
                     full_response = response
                     message_placeholder.markdown(response)

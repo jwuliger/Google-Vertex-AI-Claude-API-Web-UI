@@ -15,13 +15,10 @@ def initialize_session_state() -> None:
         st.session_state.max_tokens_reached = False
     if "system_prompt" not in st.session_state:
         st.session_state.system_prompt = ""
-    if "conversation_started" not in st.session_state:
-        st.session_state.conversation_started = False
 
 
 def reset_conversation() -> None:
     """Resets the conversation state."""
     st.session_state.messages = []
-    st.session_state.conversation_started = False
     st.session_state.last_message_content = None
     st.session_state.max_tokens_reached = False

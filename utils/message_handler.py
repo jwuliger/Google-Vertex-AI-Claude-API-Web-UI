@@ -43,6 +43,7 @@ def process_message(
     continue_last: bool = False,
     attached_files: List[Dict[str, Any]] = [],
     user_prompt: str = "",
+    system_prompt: str = "",
 ) -> Generator[str, None, None]:
     """
     Processes a message and gets a response from Claude.
@@ -53,6 +54,7 @@ def process_message(
         continue_last: Whether to continue the last response.
         attached_files: List of files attached to this specific message.
         user_prompt: The full user prompt including system prompt and file contents.
+        system_prompt: The system prompt to guide Claude's behavior.
 
     Returns:
         Claude's response as a string, or None if an error occurred.
@@ -86,7 +88,11 @@ def process_message(
     full_response = ""
     try:
         with client.messages.stream(
-            max_tokens=config.MAX_TOKENS, messages=messages, model=config.MODEL
+            max_tokens=config.MAX_TOKENS,
+            messages=messages,
+            model=config.MODEL,
+            temperature=config.TEMPERATURE,
+            system=system_prompt,
         ) as stream:
             for text in stream.text_stream:
                 full_response += text

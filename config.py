@@ -7,6 +7,7 @@ LOCATION: str = "us-east5"  # Google Cloud location
 MODEL: str = "claude-3-5-sonnet@20240620"  # Claude model name
 MAX_TOKENS: int = 8192  # Maximum number of tokens for Claude's responses
 APP_TITLE: str = "Chat with Claude"  # Title of the Streamlit application
+TEMPERATURE: int = 0.7
 
 # Configure logging
 logging.basicConfig(
