@@ -34,10 +34,6 @@ def ensure_message_alternation(messages: List[Dict[str, Any]]) -> List[Dict[str,
             # If the roles are the same, combine the content
             validated_messages[-1]["content"] += f"\n\n{message['content']}"
 
-    # Ensure the last message is from the user
-    if validated_messages and validated_messages[-1]["role"] == "assistant":
-        validated_messages.append({"role": "user", "content": "Please continue."})
-
     return validated_messages
 
 
@@ -46,6 +42,7 @@ def process_message(
     client: AnthropicVertex,
     continue_last: bool = False,
     attached_files: List[Dict[str, Any]] = [],
+    user_prompt: str = "",
 ) -> Generator[str, None, None]:
     """
     Processes a message and gets a response from Claude.
@@ -55,13 +52,11 @@ def process_message(
         client: The AnthropicVertex client instance.
         continue_last: Whether to continue the last response.
         attached_files: List of files attached to this specific message.
+        user_prompt: The full user prompt including system prompt and file contents.
 
     Returns:
         Claude's response as a string, or None if an error occurred.
     """
-    # Ensure message alternation
-    messages = ensure_message_alternation(messages)
-
     # Prepare file contents for this specific message
     file_contents = []
     for file in attached_files:
@@ -69,27 +64,24 @@ def process_message(
 
     # Compose the message
     if file_contents:
-        if messages[-1]["role"] == "user":
-            if isinstance(messages[-1]["content"], str):
-                messages[-1]["content"] += "\n\n" + "\n".join(
-                    str(item) for item in file_contents
-                )
-            elif isinstance(messages[-1]["content"], list):
-                messages[-1]["content"].extend(file_contents)
+        user_prompt += "\n\n" + "\n".join(str(item) for item in file_contents)
+
+    if continue_last:
+        if messages[-1]["role"] == "assistant":
+            messages.append(
+                {
+                    "role": "user",
+                    "content": "Please continue your previous response.",
+                }
+            )
+    elif user_prompt:
+        if messages and messages[-1]["role"] == "user":
+            messages[-1]["content"] += f"\n\n{user_prompt}"
         else:
-            messages.append({"role": "user", "content": file_contents})
+            messages.append({"role": "user", "content": user_prompt})
 
-    if continue_last and messages[-1]["role"] != "user":
-        messages.append(
-            {
-                "role": "user",
-                "content": "Please continue your previous response.",
-            }
-        )
-
-    # Ensure the messages list ends with a user message
-    if messages[-1]["role"] != "user":
-        messages.append({"role": "user", "content": "Please continue."})
+    # Ensure message alternation
+    messages = ensure_message_alternation(messages)
 
     full_response = ""
     try:

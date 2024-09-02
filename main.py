@@ -61,7 +61,19 @@ def main() -> None:
     # File upload
     uploaded_files = st.file_uploader(
         "Attach a file",
-        type=["txt", "py", "js", "html", "css", "json", "jpg", "jpeg", "png", "md"],
+        type=[
+            "txt",
+            "py",
+            "js",
+            "html",
+            "css",
+            "json",
+            "jpg",
+            "jpeg",
+            "png",
+            "md",
+            "pdf",
+        ],
         accept_multiple_files=True,
         key="file_uploader",
     )
@@ -77,11 +89,6 @@ def main() -> None:
         attached_files = []
         if uploaded_files:
             attached_files = render_file_upload(uploaded_files)
-            # Include attached files in the prompt
-            for file in attached_files:
-                prompt += (
-                    f"\n\nAttached file: {file['name']}\n```\n{file['content']}\n```"
-                )
             # Clear the file uploader
             st.session_state.pop("file_uploader", None)
 
@@ -91,12 +98,12 @@ def main() -> None:
             full_prompt = f"{st.session_state.system_prompt}\n\n{prompt}"
             st.session_state.conversation_started = True
 
-        # Display the new user message
+        # Display the new user message (without file content)
         with st.chat_message("user"):
-            st.markdown(full_prompt)
+            st.markdown(prompt)
 
-        # Add user message to conversation history
-        add_message_to_history("user", full_prompt)
+        # Add user message to conversation history (without file content)
+        add_message_to_history("user", prompt)
 
         # Process the message and get Claude's response
         with st.chat_message("assistant"):
@@ -106,6 +113,7 @@ def main() -> None:
                 st.session_state.messages,
                 client,
                 attached_files=attached_files,
+                user_prompt=full_prompt,
             ):
                 full_response = response
                 message_placeholder.markdown(response)

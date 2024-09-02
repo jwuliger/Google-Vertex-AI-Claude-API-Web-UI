@@ -6,6 +6,7 @@ import logging
 import os
 from typing import Any, Dict, List, Union
 
+import PyPDF2
 import streamlit as st
 from PIL import Image
 
@@ -102,6 +103,28 @@ def process_file(file: st.runtime.uploaded_file_manager.UploadedFile) -> Dict[st
         except Exception as e:
             logger.exception("Error processing markdown file: %s", e)
             return {"error": f"Error processing markdown file {file.name}: {str(e)}"}
+    elif file_ext == ".pdf":
+        try:
+            pdf_reader = PyPDF2.PdfReader(file)
+            text_content = ""
+            for page in pdf_reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text_content += page_text + "\n\n"
+
+            if not text_content.strip():
+                return {
+                    "error": f"No readable text content found in PDF file {file.name}"
+                }
+
+            return {
+                "name": file.name,
+                "type": "pdf",
+                "content": text_content.strip(),
+            }
+        except Exception as e:
+            logger.exception("Error processing PDF file: %s", e)
+            return {"error": f"Error processing PDF file {file.name}: {str(e)}"}
     else:
         return {"error": f"Unsupported file type: {file_ext}"}
 
@@ -137,7 +160,7 @@ def get_file_preview(file: Dict[str, Any]) -> str:
             if len(file["content"]) > 100
             else file["content"]
         )
-        return f"```{file['language']}\n{preview}\n```"
+        return f"\`\`\`{file['language']}\n{preview}\n\`\`\`"
     elif file["type"] == "image":
         return f"[Image Preview for {file['name']}]"
     else:
@@ -173,11 +196,18 @@ def format_file_for_message(file: Dict[str, Any]) -> List[Dict[str, Any]]:
             },
             {"type": "text", "text": f"Image file: {file['name']}"},
         ]
-    elif file["type"] == "markdown":  # Format markdown files
+    elif file["type"] == "markdown":
         return [
             {
                 "type": "text",
                 "text": f"```markdown\n{file['content']}\n```\nFile: {file['name']}",
+            }
+        ]
+    elif file["type"] == "pdf":
+        return [
+            {
+                "type": "text",
+                "text": f"PDF file: {file['name']}\n\nContent:\n\n{file['content']}",
             }
         ]
     else:

@@ -7,25 +7,18 @@ import streamlit as st
 from utils.file_handler import process_file
 
 
-def render_file_upload() -> List[Dict[str, Any]]:
+def render_file_upload(
+    uploaded_files: List[st.runtime.uploaded_file_manager.UploadedFile],
+) -> List[Dict[str, Any]]:
     """
-    Renders the file upload component in the Streamlit UI and returns processed files.
+    Processes uploaded files and returns a list of processed file data.
 
-    This function allows users to upload files, processes them, and returns a list of
-    processed file data. Files are not stored in the session state, ensuring they are
-    only associated with the current message.
+    Args:
+        uploaded_files: A list of uploaded file objects.
 
     Returns:
-        A list of dictionaries containing processed file data. Each dictionary
-        contains metadata and content for a single uploaded file.
+        A list of dictionaries containing processed file data.
     """
-    uploaded_files = st.file_uploader(
-        "Attach a file",
-        type=["txt", "py", "js", "html", "css", "json", "jpg", "jpeg", "png", "md"],
-        accept_multiple_files=True,
-        key="file_uploader",
-    )
-
     processed_files = []
 
     if uploaded_files:
@@ -58,7 +51,7 @@ def get_file_preview(file: Dict[str, Any]) -> str:
             if len(file["content"]) > 100
             else file["content"]
         )
-        return f"```{file['language']}\n{preview}\n```"
+        return f"\`\`\`{file['language']}\n{preview}\n\`\`\`"
     elif file["type"] == "image":
         return f"[Image Preview for {file['name']}]"
     elif file["type"] == "markdown":
@@ -67,7 +60,14 @@ def get_file_preview(file: Dict[str, Any]) -> str:
             if len(file["content"]) > 100
             else file["content"]
         )
-        return f"```markdown\n{preview}\n```"
+        return f"\`\`\`markdown\n{preview}\n\`\`\`"
+    elif file["type"] == "pdf":
+        preview = (
+            file["content"][:100] + "..."
+            if len(file["content"]) > 100
+            else file["content"]
+        )
+        return f"PDF Content Preview:\n{preview}"
     else:
         return "Preview not available"
 
