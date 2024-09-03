@@ -11,85 +11,44 @@ from anthropic import AnthropicVertex, APIError
 import config
 from utils.session import initialize_session_state
 
-from .file_handler import format_file_for_message
-
 logger = logging.getLogger(__name__)
-
-
-def ensure_message_alternation(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    Ensures that messages alternate between "user" and "assistant" roles.
-
-    Args:
-        messages: A list of message dictionaries.
-
-    Returns:
-        A list of validated message dictionaries with correct role alternation.
-    """
-    validated_messages = []
-    for message in messages:
-        if not validated_messages or message["role"] != validated_messages[-1]["role"]:
-            validated_messages.append(message)
-        else:
-            # If the roles are the same, combine the content
-            validated_messages[-1]["content"] += f"\n\n{message['content']}"
-
-    return validated_messages
 
 
 def process_message(
     messages: List[Dict[str, Any]],
     client: AnthropicVertex,
     continue_last: bool = False,
-    attached_files: List[Dict[str, Any]] = [],
     user_prompt: str = "",
     system_prompt: str = "",
+    message_id: Optional[str] = None,  # Add message_id parameter
 ) -> Generator[str, None, None]:
-    """
-    Processes a message and gets a response from Claude.
-
-    Args:
-        messages: The content of the message to send to Claude.
-        client: The AnthropicVertex client instance.
-        continue_last: Whether to continue the last response.
-        attached_files: List of files attached to this specific message.
-        user_prompt: The full user prompt including system prompt and file contents.
-        system_prompt: The system prompt to guide Claude's behavior.
-
-    Returns:
-        Claude's response as a string, or None if an error occurred.
-    """
-    # Prepare file contents for this specific message
-    file_contents = []
-    for file in attached_files:
-        file_contents.extend(format_file_for_message(file))
-
-    # Compose the message
-    if file_contents:
-        user_prompt += "\n\n" + "\n".join(str(item) for item in file_contents)
-
-    if continue_last:
-        if messages[-1]["role"] == "assistant":
-            messages.append(
-                {
-                    "role": "user",
-                    "content": "Please continue your previous response.",
-                }
-            )
-    elif user_prompt:
-        if messages and messages[-1]["role"] == "user":
-            messages[-1]["content"] += f"\n\n{user_prompt}"
-        else:
-            messages.append({"role": "user", "content": user_prompt})
+    # Use the existing messages without modification
+    current_messages = messages.copy()
 
     # Ensure message alternation
-    messages = ensure_message_alternation(messages)
+    if current_messages and current_messages[-1]["role"] == "user":
+        current_messages.pop()
+
+    # Add the new message
+    if continue_last:
+        if current_messages and current_messages[-1]["role"] == "assistant":
+            current_messages.append(
+                {"role": "user", "content": "Please continue your previous response."}
+            )
+    else:
+        # Include file content if it's the initial message with attachments
+        if message_id and message_id in st.session_state.files:
+            attached_files = st.session_state.files[message_id]
+            for file in attached_files:
+                user_prompt += f"\n\nAttached File: {file['name']} ({file['type']})\n```\n{file['content']}\n```"
+
+        current_messages.append({"role": "user", "content": user_prompt})
 
     full_response = ""
     try:
         with client.messages.stream(
             max_tokens=config.MAX_TOKENS,
-            messages=messages,
+            messages=current_messages,
             model=config.MODEL,
             temperature=config.TEMPERATURE,
             system=system_prompt,
@@ -121,15 +80,12 @@ def process_message(
     return full_response
 
 
-def add_message_to_history(role: str, content: str) -> None:
-    """
-    Adds a message to the conversation history.
-
-    Args:
-        role: The role of the message sender (e.g., "user" or "assistant").
-        content: The content of the message.
-    """
-    st.session_state.messages.append({"role": role, "content": content})
+def add_message_to_history(
+    role: str, content: str, message_id: Optional[str] = None
+) -> None:
+    st.session_state.messages.append(
+        {"role": role, "content": content, "message_id": message_id}
+    )
 
 
 def clear_conversation() -> None:

@@ -32,6 +32,9 @@ def render_file_upload(
                     f"Error processing file '{uploaded_file.name}': {processed_file['error']}"
                 )
 
+        # Clear the uploaded_files list after processing
+        uploaded_files = []
+
     return processed_files
 
 
@@ -45,13 +48,13 @@ def get_file_preview(file: Dict[str, Any]) -> str:
     Returns:
         A string representation of the file preview.
     """
-    if file["type"] == "code":
+    if file["type"] == "code" or file["type"] == "text":
         preview = (
             file["content"][:100] + "..."
             if len(file["content"]) > 100
             else file["content"]
         )
-        return f"\`\`\`{file['language']}\n{preview}\n\`\`\`"
+        return f"\`\`\`{file.get('language', 'text')}\n{preview}\n\`\`\`"
     elif file["type"] == "image":
         return f"[Image Preview for {file['name']}]"
     elif file["type"] == "markdown":

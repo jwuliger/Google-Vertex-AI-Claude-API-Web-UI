@@ -54,23 +54,23 @@ def process_file(file: st.runtime.uploaded_file_manager.UploadedFile) -> Dict[st
 
     file_ext = os.path.splitext(file.name)[1].lower()
 
-    if file_ext in CODE_EXTENSIONS:
+    if file_ext in CODE_EXTENSIONS or file_ext == ".txt":
         try:
             content = file.read().decode("utf-8")
             return {
                 "name": file.name,
-                "type": "code",
+                "type": "code" if file_ext in CODE_EXTENSIONS else "text",
                 "content": content,
-                "language": file_ext[1:],  # Remove the dot from extension
+                "language": file_ext[1:] if file_ext in CODE_EXTENSIONS else "text",
             }
         except UnicodeDecodeError as e:
-            logger.exception("Error decoding code file: %s", e)
+            logger.exception("Error decoding file: %s", e)
             return {
-                "error": f"Error decoding code file {file.name}. Please ensure it's in a valid UTF-8 encoding."
+                "error": f"Error decoding file {file.name}. Please ensure it's in a valid UTF-8 encoding."
             }
         except Exception as e:
-            logger.exception("Error processing code file: %s", e)
-            return {"error": f"Error processing code file {file.name}: {str(e)}"}
+            logger.exception("Error processing file: %s", e)
+            return {"error": f"Error processing file {file.name}: {str(e)}"}
     elif file_ext in [".jpg", ".jpeg", ".png"]:
         try:
             img = Image.open(file)
@@ -154,15 +154,29 @@ def get_file_preview(file: Dict[str, Any]) -> str:
     Returns:
         A string representation of the file preview.
     """
-    if file["type"] == "code":
+    if file["type"] == "code" or file["type"] == "text":
         preview = (
             file["content"][:100] + "..."
             if len(file["content"]) > 100
             else file["content"]
         )
-        return f"\`\`\`{file['language']}\n{preview}\n\`\`\`"
+        return f"\`\`\`{file.get('language', 'text')}\n{preview}\n\`\`\`"
     elif file["type"] == "image":
         return f"[Image Preview for {file['name']}]"
+    elif file["type"] == "markdown":
+        preview = (
+            file["content"][:100] + "..."
+            if len(file["content"]) > 100
+            else file["content"]
+        )
+        return f"\`\`\`markdown\n{preview}\n\`\`\`"
+    elif file["type"] == "pdf":
+        preview = (
+            file["content"][:100] + "..."
+            if len(file["content"]) > 100
+            else file["content"]
+        )
+        return f"PDF Content Preview:\n{preview}"
     else:
         return "Preview not available"
 
@@ -177,11 +191,11 @@ def format_file_for_message(file: Dict[str, Any]) -> List[Dict[str, Any]]:
     Returns:
         A list of content items formatted for Claude's message structure.
     """
-    if file["type"] == "code":
+    if file["type"] == "code" or file["type"] == "text":
         return [
             {
                 "type": "text",
-                "text": f"```{file['language']}\n{file['content']}\n```\nFile: {file['name']}",
+                "text": f"\`\`\`{file.get('language', 'text')}\n{file['content']}\n\`\`\`\nFile: {file['name']}",
             }
         ]
     elif file["type"] == "image":
@@ -200,7 +214,7 @@ def format_file_for_message(file: Dict[str, Any]) -> List[Dict[str, Any]]:
         return [
             {
                 "type": "text",
-                "text": f"```markdown\n{file['content']}\n```\nFile: {file['name']}",
+                "text": f"\`\`\`markdown\n{file['content']}\n\`\`\`\nFile: {file['name']}",
             }
         ]
     elif file["type"] == "pdf":

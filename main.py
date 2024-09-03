@@ -1,6 +1,8 @@
 # main.py
 
 import logging
+import random
+import uuid
 
 import streamlit as st
 
@@ -53,7 +55,7 @@ def main() -> None:
         help="Enter a system prompt to guide Claude's behavior.",
     )
 
-    # File upload
+    # File upload with dynamic key
     uploaded_files = st.file_uploader(
         "Attach a file",
         type=[
@@ -70,7 +72,7 @@ def main() -> None:
             "pdf",
         ],
         accept_multiple_files=True,
-        key="file_uploader",
+        key=st.session_state.file_uploader_key,
     )
 
     # Display conversation history
@@ -82,34 +84,53 @@ def main() -> None:
     if prompt := st.chat_input():
         # Process newly uploaded files
         attached_files = []
+        message_id = str(uuid.uuid4())  # Generate a unique ID for the message
         if uploaded_files:
             attached_files = render_file_upload(uploaded_files)
-            # Clear the file uploader
-            st.session_state.pop("file_uploader", None)
+            # Store files in session state with the message ID
+            st.session_state.files[message_id] = attached_files
+            # Reset the file uploader key
+            st.session_state.file_uploader_key = random.randint(0, 1000000)
 
-        # Display the new user message (without file content)
+        # Prepare the message content
+        display_content = prompt
+        if attached_files:
+            display_content += "\n\nAttached Files:\n"
+            for file in attached_files:
+                display_content += f"\n- {file['name']} ({file['type']})"
+
+        # Display the new user message
         with st.chat_message("user"):
-            st.markdown(prompt)
+            st.markdown(display_content)
 
-        # Add user message to conversation history (without file content)
-        add_message_to_history("user", prompt)
+        # Add user message to conversation history (without file contents)
+        add_message_to_history("user", display_content, message_id)
+
+        # Get the conversation history without file contents
+        conversation_history = [
+            {"role": msg["role"], "content": msg["content"]}
+            for msg in st.session_state.messages[:-1]  # Exclude the last message
+        ]
 
         # Process the message and get Claude's response
         with st.chat_message("assistant"):
             message_placeholder = st.empty()
             full_response = ""
             for response in process_message(
-                st.session_state.messages,
+                conversation_history,
                 client,
-                attached_files=attached_files,
-                user_prompt=prompt,
+                user_prompt=prompt,  # Only send the prompt, not file contents
                 system_prompt=system_prompt,
+                message_id=message_id,  # Pass the message ID
             ):
                 full_response = response
                 message_placeholder.markdown(response)
 
         # Add Claude's response to the conversation history
         add_message_to_history("assistant", full_response)
+
+        # Clear the files after they have been processed
+        st.session_state.files = {}
 
     # Clear conversation button
     if st.session_state.messages:
