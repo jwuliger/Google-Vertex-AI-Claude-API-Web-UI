@@ -82,6 +82,10 @@ def main() -> None:
 
     # Chat input
     if prompt := st.chat_input():
+        if not prompt.strip():
+            st.info("Please enter a message.")
+            return
+
         # Process newly uploaded files
         attached_files = []
         message_id = str(uuid.uuid4())  # Generate a unique ID for the message

@@ -34,6 +34,8 @@ build-backend = "poetry.core.masonry.api"
 # main.py
 
 import logging
+import random
+import uuid
 
 import streamlit as st
 
@@ -86,7 +88,7 @@ def main() -> None:
         help="Enter a system prompt to guide Claude's behavior.",
     )
 
-    # File upload
+    # File upload with dynamic key
     uploaded_files = st.file_uploader(
         "Attach a file",
         type=[
@@ -103,7 +105,7 @@ def main() -> None:
             "pdf",
         ],
         accept_multiple_files=True,
-        key="file_uploader",
+        key=st.session_state.file_uploader_key,
     )
 
     # Display conversation history
@@ -115,10 +117,13 @@ def main() -> None:
     if prompt := st.chat_input():
         # Process newly uploaded files
         attached_files = []
+        message_id = str(uuid.uuid4())  # Generate a unique ID for the message
         if uploaded_files:
             attached_files = render_file_upload(uploaded_files)
-            # Clear the file uploader
-            st.session_state.pop("file_uploader", None)
+            # Store files in session state with the message ID
+            st.session_state.files[message_id] = attached_files
+            # Reset the file uploader key
+            st.session_state.file_uploader_key = random.randint(0, 1000000)
 
         # Prepare the message content
         display_content = prompt
@@ -132,16 +137,7 @@ def main() -> None:
             st.markdown(display_content)
 
         # Add user message to conversation history (without file contents)
-        add_message_to_history("user", display_content)
-
-        # Prepare full content for Claude (including file contents)
-        full_content = prompt
-        if attached_files:
-            full_content += "\n\nAttached Files:\n"
-            for file in attached_files:
-                full_content += (
-                    f"\n{file['name']} ({file['type']}):\n{file['content']}\n"
-                )
+        add_message_to_history("user", display_content, message_id)
 
         # Get the conversation history without file contents
         conversation_history = [
@@ -156,14 +152,18 @@ def main() -> None:
             for response in process_message(
                 conversation_history,
                 client,
-                user_prompt=full_content,
+                user_prompt=prompt,  # Only send the prompt, not file contents
                 system_prompt=system_prompt,
+                message_id=message_id,  # Pass the message ID
             ):
                 full_response = response
                 message_placeholder.markdown(response)
 
         # Add Claude's response to the conversation history
         add_message_to_history("assistant", full_response)
+
+        # Clear the files after they have been processed
+        st.session_state.files = {}
 
     # Clear conversation button
     if st.session_state.messages:
@@ -239,6 +239,8 @@ __all__ = ["get_claude_client", "process_message"]
 ```py
 # utils/session.py
 
+import random  # Import random for generating random keys
+
 import streamlit as st
 
 
@@ -254,6 +256,10 @@ def initialize_session_state() -> None:
         st.session_state.max_tokens_reached = False
     if "system_prompt" not in st.session_state:
         st.session_state.system_prompt = ""
+    if "files" not in st.session_state:  # Initialize files dictionary
+        st.session_state.files = {}
+    if "file_uploader_key" not in st.session_state:  # Initialize file_uploader_key
+        st.session_state.file_uploader_key = random.randint(0, 1000000)
 
 
 def reset_conversation() -> None:
@@ -262,6 +268,10 @@ def reset_conversation() -> None:
     st.session_state.attached_files = []
     st.session_state.last_message_content = None
     st.session_state.max_tokens_reached = False
+    st.session_state.files = {}  # Clear the files dictionary
+    st.session_state.file_uploader_key = random.randint(
+        0, 1000000
+    )  # Reset the file uploader key
     # Clear the file uploader state
     st.session_state.pop("file_uploader", None)
 
@@ -292,6 +302,7 @@ def process_message(
     continue_last: bool = False,
     user_prompt: str = "",
     system_prompt: str = "",
+    message_id: Optional[str] = None,  # Add message_id parameter
 ) -> Generator[str, None, None]:
     # Use the existing messages without modification
     current_messages = messages.copy()
@@ -307,6 +318,12 @@ def process_message(
                 {"role": "user", "content": "Please continue your previous response."}
             )
     else:
+        # Include file content if it's the initial message with attachments
+        if message_id and message_id in st.session_state.files:
+            attached_files = st.session_state.files[message_id]
+            for file in attached_files:
+                user_prompt += f"\n\nAttached File: {file['name']} ({file['type']})\n\`\`\`\n{file['content']}\n\`\`\`"
+
         current_messages.append({"role": "user", "content": user_prompt})
 
     full_response = ""
@@ -345,8 +362,12 @@ def process_message(
     return full_response
 
 
-def add_message_to_history(role: str, content: str) -> None:
-    st.session_state.messages.append({"role": role, "content": content})
+def add_message_to_history(
+    role: str, content: str, message_id: Optional[str] = None
+) -> None:
+    st.session_state.messages.append(
+        {"role": role, "content": content, "message_id": message_id}
+    )
 
 
 def clear_conversation() -> None:
@@ -686,6 +707,9 @@ def render_file_upload(
                 st.error(
                     f"Error processing file '{uploaded_file.name}': {processed_file['error']}"
                 )
+
+        # Clear the uploaded_files list after processing
+        uploaded_files = []
 
     return processed_files
 
