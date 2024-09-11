@@ -66,7 +66,7 @@ def process_file(file: st.runtime.uploaded_file_manager.UploadedFile) -> Dict[st
     file_ext = os.path.splitext(file.name)[1].lower()
 
     with safe_file_handler(file) as safe_file:
-        if file_ext in CODE_EXTENSIONS or file_ext == ".txt":
+        if file_ext in CODE_EXTENSIONS or file_ext in [".txt", ".xml"]:
             return process_text_file(safe_file, file_ext)
         elif file_ext in [".jpg", ".jpeg", ".png"]:
             return process_image_file(safe_file)

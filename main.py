@@ -83,6 +83,7 @@ def main() -> None:
             "png",
             "md",
             "pdf",
+            "xml",
         ],
         accept_multiple_files=True,
         key=st.session_state.file_uploader_key,

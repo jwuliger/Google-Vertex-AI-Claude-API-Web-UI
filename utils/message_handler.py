@@ -28,29 +28,35 @@ def process_message(
 
     current_messages = messages.copy()
 
-    # Ensure message alternation
+    # Ensure the last message is from the assistant
     if current_messages and current_messages[-1]["role"] == "user":
         current_messages.pop()
 
     logger.debug("Current messages before continue_last: %s", current_messages)
 
+    # Prepare the new user message
+    new_user_message = ""
+
+    # Include file content if it's the initial message with attachments
+    if message_id and message_id in st.session_state.files:
+        attached_files = st.session_state.files[message_id]
+        for file in attached_files:
+            formatted_file = format_file_for_message(file)
+            new_user_message += "\n".join(
+                [item["text"] for item in formatted_file if item["type"] == "text"]
+            )
+            new_user_message += "\n\n"
+
+    # Add the user prompt
+    new_user_message += user_prompt
+
     # Add the new message
     if continue_last:
-        if current_messages and current_messages[-1]["role"] == "assistant":
-            current_messages.append(
-                {"role": "user", "content": "Please continue your previous response."}
-            )
-    else:
-        # Include file content if it's the initial message with attachments
-        if message_id and message_id in st.session_state.files:
-            attached_files = st.session_state.files[message_id]
-            for file in attached_files:
-                formatted_file = format_file_for_message(file)
-                current_messages.extend(formatted_file)
+        new_user_message = "Please continue your previous response."
 
-        current_messages.append({"role": "user", "content": user_prompt})
+    current_messages.append({"role": "user", "content": new_user_message.strip()})
 
-    logger.debug("Current messages after continue_last: %s", current_messages)
+    logger.debug("Current messages after adding user message: %s", current_messages)
 
     full_response = ""
     retries = 0
