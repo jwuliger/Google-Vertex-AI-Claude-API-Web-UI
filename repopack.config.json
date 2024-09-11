@@ -1,16 +1,16 @@
 {
-  "output": {
-    "filePath": "repopack-output.xml",
-    "style": "xml",
-    "removeComments": false,
-    "removeEmptyLines": false,
-    "topFilesLength": 5,
-    "showLineNumbers": false
-  },
-  "include": [],
-  "ignore": {
-    "useGitignore": true,
-    "useDefaultPatterns": true,
-    "customPatterns": []
-  }
+    "output": {
+        "filePath": "repopack-output.xml",
+        "style": "xml",
+        "removeComments": false,
+        "removeEmptyLines": false,
+        "topFilesLength": 5,
+        "showLineNumbers": false
+    },
+    "include": [],
+    "ignore": {
+        "useGitignore": true,
+        "useDefaultPatterns": true,
+        "customPatterns": []
+    }
 }
