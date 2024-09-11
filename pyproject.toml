@@ -2,7 +2,7 @@
 name = "claude-chat-ui"
 version = "0.1.0"
 description = ""
-authors = ["Jared Wuliger <hello@jaredwuliger.com>"]
+authors = ["Jared Wuliger <jaredwuliger@gmail>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
