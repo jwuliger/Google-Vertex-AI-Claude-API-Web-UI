@@ -10,6 +10,7 @@ import streamlit as st
 from anthropic import AnthropicVertex, APIError, APIStatusError
 
 import config
+from utils.file_handler import format_file_for_message
 from utils.session import initialize_session_state
 
 logger = logging.getLogger(__name__)
@@ -21,20 +22,17 @@ def process_message(
     continue_last: bool = False,
     user_prompt: str = "",
     system_prompt: str = "",
-    message_id: Optional[str] = None,  # Add message_id parameter
+    message_id: Optional[str] = None,
 ) -> Generator[str, None, None]:
-    logger.debug("Initial messages: %s", messages)  # Log initial messages
+    logger.debug("Initial messages: %s", messages)
 
-    # Use the existing messages without modification
     current_messages = messages.copy()
 
     # Ensure message alternation
     if current_messages and current_messages[-1]["role"] == "user":
         current_messages.pop()
 
-    logger.debug(
-        "Current messages before continue_last: %s", current_messages
-    )  # Log before continue_last
+    logger.debug("Current messages before continue_last: %s", current_messages)
 
     # Add the new message
     if continue_last:
@@ -47,24 +45,23 @@ def process_message(
         if message_id and message_id in st.session_state.files:
             attached_files = st.session_state.files[message_id]
             for file in attached_files:
-                user_prompt += f"\n\nAttached File: {file['name']} ({file['type']})\n\`\`\`\n{file['content']}\n\`\`\`"
+                formatted_file = format_file_for_message(file)
+                current_messages.extend(formatted_file)
 
         current_messages.append({"role": "user", "content": user_prompt})
 
-    logger.debug(
-        "Current messages after continue_last: %s", current_messages
-    )  # Log after continue_last
+    logger.debug("Current messages after continue_last: %s", current_messages)
 
     full_response = ""
     retries = 0
-    max_retries = 3  # Maximum number of retries
-    retry_delay = 1  # Initial retry delay in seconds
+    max_retries = 3
+    retry_delay = 1
 
     while retries < max_retries:
         try:
             logger.debug(
                 "Messages sent to API (retry %d): %s", retries, current_messages
-            )  # Log messages sent to API
+            )
             with client.messages.stream(
                 max_tokens=config.MAX_TOKENS,
                 messages=current_messages,
@@ -76,13 +73,12 @@ def process_message(
                     full_response += text
                     yield full_response
 
-            # API call successful, break out of the retry loop
             break
 
         except APIStatusError as e:
-            if e.error.type == "overloaded_error":
+            if e.status_code == 429:  # Too Many Requests
                 logger.warning(
-                    "Vertex AI overloaded (retry %d), retrying in %d seconds...",
+                    "Vertex AI rate limit reached (retry %d), retrying in %d seconds...",
                     retries,
                     retry_delay,
                 )
@@ -94,21 +90,21 @@ def process_message(
                 st.error(
                     f"An error occurred while communicating with Claude: {e.message}. Please try again later or contact support."
                 )
-                return None
+                return
         except APIError as e:
             logger.exception("Claude API error: %s", e)
             st.error(
                 f"An error occurred while communicating with Claude: {e.message}. Please try again later or contact support."
             )
-            return None
+            return
         except Exception as e:
             logger.exception("Unexpected error: %s", e)
             st.error(f"An unexpected error occurred: {e}. Please try again later.")
-            return None
+            return
 
     if retries == max_retries:
-        # Maximum retries reached, raise the exception
-        raise APIStatusError("Vertex AI overloaded, maximum retries reached.") from None
+        st.error("Maximum retries reached. Please try again later.")
+        return
 
     # Check if max tokens were reached
     st.session_state.max_tokens_reached = (
@@ -147,3 +143,14 @@ def get_conversation_history() -> List[Dict[str, Any]]:
         A list of message dictionaries representing the conversation history.
     """
     return st.session_state.messages
+
+
+def truncate_conversation_history(max_messages: int = 10) -> None:
+    """
+    Truncates the conversation history to the specified number of most recent messages.
+
+    Args:
+        max_messages: The maximum number of messages to keep in the history.
+    """
+    if len(st.session_state.messages) > max_messages:
+        st.session_state.messages = st.session_state.messages[-max_messages:]

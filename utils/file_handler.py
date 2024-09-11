@@ -4,28 +4,45 @@ import base64
 import io
 import logging
 import os
+from contextlib import contextmanager
 from typing import Any, Dict, List, Union
 
 import PyPDF2
 import streamlit as st
 from PIL import Image
 
+from config import CODE_EXTENSIONS, MAX_FILE_SIZE
+
 logger = logging.getLogger(__name__)
 
-MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
-CODE_EXTENSIONS = [
-    ".py",
-    ".js",
-    ".html",
-    ".css",
-    ".json",
-    ".cpp",
-    ".java",
-    ".rb",
-    ".php",
-    ".swift",
-    ".kt",
-]
+
+class FileProcessingError(Exception):
+    """Custom exception for file processing errors."""
+
+    pass
+
+
+@contextmanager
+def safe_file_handler(file: st.runtime.uploaded_file_manager.UploadedFile):
+    """
+    Context manager for safe file handling.
+
+    Args:
+        file: The uploaded file object.
+
+    Yields:
+        The file object for processing.
+
+    Raises:
+        FileProcessingError: If there's an error during file processing.
+    """
+    try:
+        yield file
+    except Exception as e:
+        logger.exception(f"Error processing file {file.name}: {str(e)}")
+        raise FileProcessingError(f"Error processing file {file.name}: {str(e)}")
+    finally:
+        file.close()
 
 
 def process_file(file: st.runtime.uploaded_file_manager.UploadedFile) -> Dict[str, Any]:
@@ -37,96 +54,106 @@ def process_file(file: st.runtime.uploaded_file_manager.UploadedFile) -> Dict[st
 
     Returns:
         A dictionary containing file metadata and content, or an error message.
-        Example:
-        {
-            "name": "myfile.py",
-            "type": "code",
-            "content": "print('Hello, world!')",
-            "language": "python"
-        }
-        or
-        {
-            "error": "File myfile.txt exceeds the maximum size limit of 5 MB"
-        }
+
+    Raises:
+        FileProcessingError: If there's an error during file processing.
     """
     if file.size > MAX_FILE_SIZE:
-        return {"error": f"File {file.name} exceeds the maximum size limit of 5 MB"}
+        raise FileProcessingError(
+            f"File {file.name} exceeds the maximum size limit of {MAX_FILE_SIZE/1024/1024:.2f} MB"
+        )
 
     file_ext = os.path.splitext(file.name)[1].lower()
 
-    if file_ext in CODE_EXTENSIONS or file_ext == ".txt":
-        try:
-            content = file.read().decode("utf-8")
-            return {
-                "name": file.name,
-                "type": "code" if file_ext in CODE_EXTENSIONS else "text",
-                "content": content,
-                "language": file_ext[1:] if file_ext in CODE_EXTENSIONS else "text",
-            }
-        except UnicodeDecodeError as e:
-            logger.exception("Error decoding file: %s", e)
-            return {
-                "error": f"Error decoding file {file.name}. Please ensure it's in a valid UTF-8 encoding."
-            }
-        except Exception as e:
-            logger.exception("Error processing file: %s", e)
-            return {"error": f"Error processing file {file.name}: {str(e)}"}
-    elif file_ext in [".jpg", ".jpeg", ".png"]:
-        try:
-            img = Image.open(file)
-            img = img.convert("RGB")  # Convert to RGB mode
-            buffered = io.BytesIO()
-            img.save(buffered, format="PNG")
-            img_str = base64.b64encode(buffered.getvalue()).decode()
-            return {"name": file.name, "type": "image", "content": img_str}
-        except Image.UnidentifiedImageError as e:
-            logger.exception("Error processing image file: %s", e)
-            return {
-                "error": f"Error processing image file {file.name}. Please ensure it's a valid image format (JPG, JPEG, or PNG)."
-            }
-        except Exception as e:
-            logger.exception("Error processing image file: %s", e)
-            return {"error": f"Error processing image file {file.name}: {str(e)}"}
-    elif file_ext == ".md":  # Handle markdown files
-        try:
-            content = file.read().decode("utf-8")
-            return {
-                "name": file.name,
-                "type": "markdown",
-                "content": content,
-            }
-        except UnicodeDecodeError as e:
-            logger.exception("Error decoding markdown file: %s", e)
-            return {
-                "error": f"Error decoding markdown file {file.name}. Please ensure it's in a valid UTF-8 encoding."
-            }
-        except Exception as e:
-            logger.exception("Error processing markdown file: %s", e)
-            return {"error": f"Error processing markdown file {file.name}: {str(e)}"}
-    elif file_ext == ".pdf":
-        try:
-            pdf_reader = PyPDF2.PdfReader(file)
-            text_content = ""
-            for page in pdf_reader.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    text_content += page_text + "\n\n"
+    with safe_file_handler(file) as safe_file:
+        if file_ext in CODE_EXTENSIONS or file_ext == ".txt":
+            return process_text_file(safe_file, file_ext)
+        elif file_ext in [".jpg", ".jpeg", ".png"]:
+            return process_image_file(safe_file)
+        elif file_ext == ".md":
+            return process_markdown_file(safe_file)
+        elif file_ext == ".pdf":
+            return process_pdf_file(safe_file)
+        else:
+            raise FileProcessingError(f"Unsupported file type: {file_ext}")
 
-            if not text_content.strip():
-                return {
-                    "error": f"No readable text content found in PDF file {file.name}"
-                }
 
-            return {
-                "name": file.name,
-                "type": "pdf",
-                "content": text_content.strip(),
-            }
-        except Exception as e:
-            logger.exception("Error processing PDF file: %s", e)
-            return {"error": f"Error processing PDF file {file.name}: {str(e)}"}
-    else:
-        return {"error": f"Unsupported file type: {file_ext}"}
+def process_text_file(
+    file: st.runtime.uploaded_file_manager.UploadedFile, file_ext: str
+) -> Dict[str, Any]:
+    """Process text and code files."""
+    try:
+        content = file.read().decode("utf-8")
+        return {
+            "name": file.name,
+            "type": "code" if file_ext in CODE_EXTENSIONS else "text",
+            "content": content,
+            "language": file_ext[1:] if file_ext in CODE_EXTENSIONS else "text",
+        }
+    except UnicodeDecodeError as e:
+        raise FileProcessingError(
+            f"Error decoding file {file.name}. Please ensure it's in a valid UTF-8 encoding."
+        )
+
+
+def process_image_file(
+    file: st.runtime.uploaded_file_manager.UploadedFile,
+) -> Dict[str, Any]:
+    """Process image files."""
+    try:
+        img = Image.open(file)
+        img = img.convert("RGB")
+        buffered = io.BytesIO()
+        img.save(buffered, format="PNG")
+        img_str = base64.b64encode(buffered.getvalue()).decode()
+        return {"name": file.name, "type": "image", "content": img_str}
+    except Image.UnidentifiedImageError as e:
+        raise FileProcessingError(
+            f"Error processing image file {file.name}. Please ensure it's a valid image format (JPG, JPEG, or PNG)."
+        )
+
+
+def process_markdown_file(
+    file: st.runtime.uploaded_file_manager.UploadedFile,
+) -> Dict[str, Any]:
+    """Process markdown files."""
+    try:
+        content = file.read().decode("utf-8")
+        return {
+            "name": file.name,
+            "type": "markdown",
+            "content": content,
+        }
+    except UnicodeDecodeError as e:
+        raise FileProcessingError(
+            f"Error decoding markdown file {file.name}. Please ensure it's in a valid UTF-8 encoding."
+        )
+
+
+def process_pdf_file(
+    file: st.runtime.uploaded_file_manager.UploadedFile,
+) -> Dict[str, Any]:
+    """Process PDF files."""
+    try:
+        pdf_reader = PyPDF2.PdfReader(file)
+        text_content = ""
+        for page in pdf_reader.pages:
+            page_text = page.extract_text()
+            if page_text:
+                text_content += page_text + "\n\n"
+
+        if not text_content.strip():
+            raise FileProcessingError(
+                f"No readable text content found in PDF file {file.name}"
+            )
+
+        return {
+            "name": file.name,
+            "type": "pdf",
+            "content": text_content.strip(),
+        }
+    except Exception as e:
+        raise FileProcessingError(f"Error processing PDF file {file.name}: {str(e)}")
 
 
 def process_files(
@@ -141,7 +168,15 @@ def process_files(
     Returns:
         A list of dictionaries containing file metadata and content, or error messages.
     """
-    return [process_file(file) for file in files]
+    processed_files = []
+    for file in files:
+        try:
+            processed_file = process_file(file)
+            processed_files.append(processed_file)
+        except FileProcessingError as e:
+            logger.error(str(e))
+            st.error(str(e))
+    return processed_files
 
 
 def get_file_preview(file: Dict[str, Any]) -> str:

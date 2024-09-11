@@ -9,12 +9,19 @@ import streamlit as st
 import config
 from ui import render_file_upload
 from utils import get_claude_client
+from utils.file_handler import FileProcessingError, process_files
 from utils.message_handler import (
     add_message_to_history,
     clear_conversation,
     process_message,
+    truncate_conversation_history,
 )
-from utils.session import initialize_session_state
+from utils.session import (
+    check_session_expiry,
+    clear_file_data,
+    initialize_session_state,
+    update_last_activity,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +46,12 @@ def main() -> None:
     initialize_session_state()
     load_css()
     st.title(config.APP_TITLE)
+
+    # Check session expiry
+    if check_session_expiry():
+        clear_conversation()
+        st.info("Your session has expired. Starting a new conversation.")
+        st.rerun()
 
     try:
         client = get_claude_client()
@@ -86,15 +99,21 @@ def main() -> None:
             st.info("Please enter a message.")
             return
 
+        update_last_activity()  # Update last activity time
+
         # Process newly uploaded files
         attached_files = []
         message_id = str(uuid.uuid4())  # Generate a unique ID for the message
         if uploaded_files:
-            attached_files = render_file_upload(uploaded_files)
-            # Store files in session state with the message ID
-            st.session_state.files[message_id] = attached_files
-            # Reset the file uploader key
-            st.session_state.file_uploader_key = random.randint(0, 1000000)
+            try:
+                attached_files = process_files(uploaded_files)
+                # Store files in session state with the message ID
+                st.session_state.files[message_id] = attached_files
+                # Reset the file uploader key
+                st.session_state.file_uploader_key = random.randint(0, 1000000)
+            except FileProcessingError as e:
+                st.error(str(e))
+                return
 
         # Prepare the message content
         display_content = prompt
@@ -109,6 +128,9 @@ def main() -> None:
 
         # Add user message to conversation history (without file contents)
         add_message_to_history("user", display_content, message_id)
+
+        # Truncate conversation history if it's too long
+        truncate_conversation_history()
 
         # Get the conversation history without file contents
         conversation_history = [
@@ -134,7 +156,7 @@ def main() -> None:
         add_message_to_history("assistant", full_response)
 
         # Clear the files after they have been processed
-        st.session_state.files = {}
+        clear_file_data()
 
     # Clear conversation button
     if st.session_state.messages:
@@ -145,6 +167,7 @@ def main() -> None:
     # Continue response button (only shown when max tokens were reached)
     if st.session_state.get("max_tokens_reached", False):
         if st.button("Continue Response"):
+            update_last_activity()  # Update last activity time
             st.session_state.max_tokens_reached = False
             with st.chat_message("assistant"):
                 message_placeholder = st.empty()
@@ -165,6 +188,9 @@ def main() -> None:
                 st.session_state.messages[-1]["content"] += full_response
             else:
                 add_message_to_history("assistant", full_response)
+
+    # Update last activity time
+    update_last_activity()
 
 
 if __name__ == "__main__":
