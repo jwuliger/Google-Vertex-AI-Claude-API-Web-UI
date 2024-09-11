@@ -1,5 +1,5 @@
 {
-    "cSpell.words": ["httpx", "levelname", "repopack"],
+    "cSpell.words": ["httpx", "levelname", "repopack", "testid"],
     "editor.formatOnSave": true,
     "[python]": {
         "editor.defaultFormatter": "ms-python.black-formatter",
