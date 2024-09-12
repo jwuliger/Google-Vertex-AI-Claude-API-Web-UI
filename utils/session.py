@@ -13,6 +13,8 @@ def initialize_session_state() -> None:
     """Initializes the Streamlit session state with necessary variables."""
     if "messages" not in st.session_state:
         st.session_state.messages = []
+    if "message_ids" not in st.session_state:
+        st.session_state.message_ids = []
     if "attached_files" not in st.session_state:
         st.session_state.attached_files = []
     if "last_message_content" not in st.session_state:
@@ -32,6 +34,7 @@ def initialize_session_state() -> None:
 def reset_conversation() -> None:
     """Resets the conversation state."""
     st.session_state.messages = []
+    st.session_state.message_ids = []
     st.session_state.attached_files = []
     st.session_state.last_message_content = None
     st.session_state.max_tokens_reached = False
@@ -71,6 +74,7 @@ def get_session_data() -> Dict[str, Any]:
     """
     return {
         "messages": st.session_state.messages,
+        "message_ids": st.session_state.message_ids,
         "attached_files": st.session_state.attached_files,
         "last_message_content": st.session_state.last_message_content,
         "max_tokens_reached": st.session_state.max_tokens_reached,

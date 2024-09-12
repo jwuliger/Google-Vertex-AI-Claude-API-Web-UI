@@ -70,6 +70,11 @@ def process_message(
 
     logger.debug("Current messages after adding user message: %s", current_messages)
 
+    # Remove message_id from messages before sending to API
+    api_messages = [
+        {"role": msg["role"], "content": msg["content"]} for msg in current_messages
+    ]
+
     full_response = ""
     retries = 0
     max_retries = 3
@@ -77,12 +82,10 @@ def process_message(
 
     while retries < max_retries:
         try:
-            logger.debug(
-                "Messages sent to API (retry %d): %s", retries, current_messages
-            )
+            logger.debug("Messages sent to API (retry %d): %s", retries, api_messages)
             with client.messages.stream(
                 max_tokens=config.MAX_TOKENS,
-                messages=current_messages,
+                messages=api_messages,
                 model=config.MODEL,
                 temperature=config.TEMPERATURE,
                 system=system_prompt,
@@ -144,9 +147,12 @@ def process_message(
 def add_message_to_history(
     role: str, content: str, message_id: Optional[str] = None
 ) -> None:
-    st.session_state.messages.append(
-        {"role": role, "content": content, "message_id": message_id}
-    )
+    message = {"role": role, "content": content}
+    if message_id:
+        if "message_ids" not in st.session_state:
+            st.session_state.message_ids = []
+        st.session_state.message_ids.append(message_id)
+    st.session_state.messages.append(message)
 
 
 def clear_conversation() -> None:
