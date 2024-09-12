@@ -14,7 +14,6 @@ from utils.message_handler import (
     add_message_to_history,
     clear_conversation,
     process_message,
-    truncate_conversation_history,
 )
 from utils.session import (
     check_session_expiry,
@@ -130,21 +129,17 @@ def main() -> None:
         # Add user message to conversation history (without file contents)
         add_message_to_history("user", display_content, message_id)
 
-        # Truncate conversation history if it's too long
-        truncate_conversation_history()
-
-        # Get the conversation history without file contents
-        conversation_history = [
-            {"role": msg["role"], "content": msg["content"]}
-            for msg in st.session_state.messages[:-1]  # Exclude the last message
-        ]
+        # Log the current state before processing
+        logger.debug(
+            f"Current message count before processing: {len(st.session_state.messages)}"
+        )
 
         # Process the message and get Claude's response
         with st.chat_message("assistant"):
             message_placeholder = st.empty()
             full_response = ""
             for response in process_message(
-                conversation_history,
+                st.session_state.messages,
                 client,
                 user_prompt=prompt,  # Only send the prompt, not file contents
                 system_prompt=system_prompt,
@@ -155,6 +150,11 @@ def main() -> None:
 
         # Add Claude's response to the conversation history
         add_message_to_history("assistant", full_response)
+
+        # Log the state after processing
+        logger.debug(
+            f"Current message count after processing: {len(st.session_state.messages)}"
+        )
 
         # Clear the files after they have been processed
         clear_file_data()

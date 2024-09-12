@@ -1,6 +1,6 @@
 # utils/message_handler.py
 
-from __future__ import annotations  # Enable postponed evaluation of annotations
+from __future__ import annotations
 
 import logging
 import time
@@ -11,7 +11,7 @@ from anthropic import AnthropicVertex, APIError, APIStatusError
 
 import config
 from utils.file_handler import format_file_for_message
-from utils.session import initialize_session_state
+from utils.session import initialize_session_state, reset_conversation
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,19 @@ def process_message(
 ) -> Generator[str, None, None]:
     logger.debug("Initial messages: %s", messages)
 
+    if not messages:
+        logger.warning(
+            "Received empty message history. Initializing with a default message."
+        )
+        messages = [{"role": "user", "content": "Hello"}]
+
     current_messages = messages.copy()
+
+    # Ensure there's at least one user message in the conversation
+    if current_messages[0]["role"] != "user":
+        default_user_message = {"role": "user", "content": "Hello"}
+        current_messages.insert(0, default_user_message)
+        logger.debug("Added default user message to conversation")
 
     # Ensure the last message is from the assistant
     if current_messages and current_messages[-1]["role"] == "user":
@@ -81,8 +93,10 @@ def process_message(
 
             break
 
-        except APIStatusError as e:
-            if e.status_code == 429:  # Too Many Requests
+        except (APIStatusError, APIError) as e:
+            if (
+                isinstance(e, APIStatusError) and e.status_code == 429
+            ):  # Too Many Requests
                 logger.warning(
                     "Vertex AI rate limit reached (retry %d), retrying in %d seconds...",
                     retries,
@@ -94,22 +108,19 @@ def process_message(
             else:
                 logger.exception("Claude API error: %s", e)
                 st.error(
-                    f"An error occurred while communicating with Claude: {e.message}. Please try again later or contact support."
+                    f"An error occurred while communicating with Claude: {e}. Please try again later or contact support."
                 )
+                reset_conversation()
                 return
-        except APIError as e:
-            logger.exception("Claude API error: %s", e)
-            st.error(
-                f"An error occurred while communicating with Claude: {e.message}. Please try again later or contact support."
-            )
-            return
         except Exception as e:
             logger.exception("Unexpected error: %s", e)
             st.error(f"An unexpected error occurred: {e}. Please try again later.")
+            reset_conversation()
             return
 
     if retries == max_retries:
         st.error("Maximum retries reached. Please try again later.")
+        reset_conversation()
         return
 
     # Check if max tokens were reached
@@ -120,6 +131,12 @@ def process_message(
         st.warning(
             "Claude's response has reached the maximum token limit. You can click 'Continue Response' to get more."
         )
+
+    # Update the session state with the processed messages
+    st.session_state.messages = current_messages
+    logger.debug(
+        f"Updated session state messages. Current count: {len(st.session_state.messages)}"
+    )
 
     return full_response
 
@@ -149,14 +166,3 @@ def get_conversation_history() -> List[Dict[str, Any]]:
         A list of message dictionaries representing the conversation history.
     """
     return st.session_state.messages
-
-
-def truncate_conversation_history(max_messages: int = 10) -> None:
-    """
-    Truncates the conversation history to the specified number of most recent messages.
-
-    Args:
-        max_messages: The maximum number of messages to keep in the history.
-    """
-    if len(st.session_state.messages) > max_messages:
-        st.session_state.messages = st.session_state.messages[-max_messages:]
