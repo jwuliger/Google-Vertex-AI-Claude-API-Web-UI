@@ -6,7 +6,7 @@ PROJECT_ID: str = "speak-sense"
 LOCATION: str = "us-east5"
 
 # Claude model configuration
-MODEL: str = "claude-3-5-sonnet@20240620"
+MODEL: str = "claude-3-5-sonnet-v2@20241022"  # Sonnet v2
 MAX_TOKENS: int = 8192
 TEMPERATURE: float = 0.7
 
